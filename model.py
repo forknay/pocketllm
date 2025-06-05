@@ -7,8 +7,10 @@ class ModelArgs:
     """
     A class to hold model arguments.
     """
-    dim: int = 512
+    dim: int = 128
     max_len: int = 1024
+    block_size: int = 8
+    batch_size: int = 4
 
 def build_vocab(text: str):
     """
@@ -47,6 +49,35 @@ def detokenize(tokens: list, decode: dict):
 
     return "".join(char_list)
 
+def split_dataset(data: torch.tensor, train_ratio: float = 0.9):
+    """
+    Split the dataset into training and validation sets.
+    """
+    split_index = int(len(data) * train_ratio)
+    train_data = data[:split_index]
+    val_data = data[split_index:]
+
+    return train_data, val_data
+
+def get_batch(mode: str):
+    """
+    Get a batch of data for training or validation.
+    """
+    if mode == "train":
+        data = train_data
+    elif mode == "val":
+        data = val_data
+    else:
+        raise ValueError("Mode must be 'train' or 'val'.")
+
+    batch_size = ModelArgs.batch_size
+    block_size = ModelArgs.block_size
+    batch_data = torch.empty((batch_size, block_size + 1), dtype=torch.long)
+    
+    for b in range(batch_size):
+        start = torch.randint(0, len(data) - block_size - 1, (1,)).item()
+        batch_data[b] = data[start:start + block_size + 1]
+    return batch_data
 
 class Embedding(nn.Module):
     def __init__(self, vocab_size: int, dim: int):
@@ -67,5 +98,14 @@ if __name__ == "__main__":
     file = open("input.txt", "r", encoding="utf-8")
     text = file.read()
     encode_vocab, decode_vocab, vocab_size = build_vocab(text)
-    print(detokenize(tokenize(text[:100], encode_vocab), decode_vocab))
+    x = detokenize(tokenize(text[:100], encode_vocab), decode_vocab)
 
+    train_data, val_data = split_dataset(tokenize(text[:100], encode_vocab))
+    print(detokenize(train_data, decode_vocab))
+    print("////////")
+    print(detokenize(val_data, decode_vocab))
+    x = get_batch("train")
+    for i in range(x.shape[0]):
+        print(detokenize(x[i], decode_vocab))
+        print("////////")
+    
