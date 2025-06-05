@@ -7,11 +7,15 @@ class ModelArgs:
     """
     A class to hold model arguments.
     """
-    dim: int = 128
-    max_len: int = 1024
+    dim: int = 32
+    max_len = 512
     block_size: int = 8
     batch_size: int = 4
-
+    lr = 1e-3
+    qkv_dim: int = 64
+    eps = 1e-6
+    vocab_size = 65
+    n_heads: int = 4
 def build_vocab(text: str):
     """
     Build a character-level vocabulary from the text.
@@ -19,12 +23,12 @@ def build_vocab(text: str):
     encode = {}
     decode = {}
     text = sorted(list(set(text)))
+    print(text[0:10])
     for char in text:
         if char not in encode: # And by extension not in decode
-            encode[char] = len(encode) + 1
-            decode[len(decode) + 1] = char
-    encode["<start>"] = 0
-    decode[0] = "<start>"
+            encode[char] = len(encode)
+            decode[len(decode)] = char
+
     assert len(encode) == len(decode), "Encoding and decoding dictionaries must have the same length."
 
     return encode, decode, len(encode)
@@ -33,7 +37,7 @@ def tokenize(text: str, encode: dict):
     """"
     Convert text to tokens using the vocabulary.
     """
-    tokens = [0]  # Start token
+    tokens = []  
     for char in text:
         tokens.append(encode[char])
 
@@ -49,7 +53,7 @@ def detokenize(tokens: list, decode: dict):
 
     return "".join(char_list)
 
-def split_dataset(data: torch.tensor, train_ratio: float = 0.9):
+def split_dataset(data: torch.Tensor, train_ratio: float = 0.9):
     """
     Split the dataset into training and validation sets.
     """
@@ -83,24 +87,83 @@ def get_batch(mode: str):
     return input_data, target_data
 
 class Embedding(nn.Module):
-    def __init__(self, vocab_size: int, dim: int):
+    """
+    Embedding layer for the model.
+    """
+    def __init__(self, ModelArgs):
         super().__init__()
-        self.vocab_size = vocab_size
-        self.dim = dim
-        self.embedding = nn.Embedding(vocab_size, dim)
+        self.vocab_size = ModelArgs.vocab_size
+        self.dim = ModelArgs.dim
+        self.block_size = ModelArgs.block_size
+        self.token_embedding = nn.Embedding(vocab_size, self.dim)
+        self.position_embedding = nn.Embedding(self.block_size, self.dim)
 
     def forward(self, x):
-        return self.embedding(x)
+        
+        return self.token_embedding(x) + self.position_embedding(torch.arange(x.size(1), device=x.device))
+
+class RMSNorm(nn.Module):
+    """"
+    Normalization layer
+    """
+    def __init__(self, ModelArgs):
+        super().__init__()
+        self.dim = ModelArgs.dim
+        self.eps = ModelArgs.eps
+        self.weight = nn.Parameter(torch.ones(self.dim))
+
+    def forward(self, x):
+        return F.rms_norm(x, (self.dim,), self.weight, self.eps)
+
+class MHA(nn.Module):
+    """
+    Multi-head attention Layer
+    """
+    def __init__(self, ModelArgs):
+        super().__init__()
+        self.dim = ModelArgs.dim
+        self.qkv_dim = ModelArgs.qkv_dim
+        self.n_heads = ModelArgs.n_heads
+        self.head_dim = self.qkv_dim // self.n_heads
+        self.wq = nn.Linear(self.dim, self.qkv_dim) # (H, D, C)
+        self.wk = nn.Linear(self.dim, self.qkv_dim) # (H, D, C)
+        self.wv = nn.Linear(self.dim, self.qkv_dim) # (H, D, C)
+        self.wo = nn.Linear(self.qkv_dim, self.dim) # (C, D)
+        self.softmax_scale = self.head_dim ** -0.5
+
+
+    def forward(self, x: torch.Tensor, mask: bool = True):
+        """
+        Forward pass for the attention head.
+        """
+        batch_size, seq_len, _ = x.size() # (B, S, D) (not worrying about multiple heads yet)
+        q = self.wq(x).view(batch_size, seq_len, self.n_heads, self.head_dim).transpose(1, 2)  # (B, H, S, C)
+        k = self.wk(x).view(batch_size, seq_len, self.n_heads, self.head_dim).transpose(1, 2)
+        v = self.wv(x).view(batch_size, seq_len, self.n_heads, self.head_dim).transpose(1, 2)
+
+        scores = torch.matmul(q,k.transpose(-2, -1)) * self.softmax_scale # (B, H, S, S)
+        if mask:
+            attention_mask = torch.tril(torch.ones(seq_len, seq_len, device=scores.device))
+            scores = scores.masked_fill(attention_mask.unsqueeze(0).unsqueeze(0) == 0, float("-inf")) 
+        
+        scores = F.softmax(scores, dim=-1)
+        x = torch.matmul(scores, v) # (B, H, S, C)
+        x = self.wo(x.transpose(1,2).contiguous().view(batch_size, seq_len, self.n_heads * self.head_dim)) # (B, S, D)
+
+        return x
 
 
 
-
+    
 
 if __name__ == "__main__":
 
     file = open("input.txt", "r", encoding="utf-8")
     text = file.read()
     encode_vocab, decode_vocab, vocab_size = build_vocab(text)
+    assert vocab_size == ModelArgs.vocab_size, "Vocabulary size mismatch."
+
+
     x = detokenize(tokenize(text[:100], encode_vocab), decode_vocab)
 
     train_data, val_data = split_dataset(tokenize(text[:100], encode_vocab))
@@ -108,8 +171,14 @@ if __name__ == "__main__":
     print("////////")
     print(detokenize(val_data, decode_vocab))
     x, y = get_batch("train")
-    print(x, y)
-    for i in range(x.shape[0]):
-        print(detokenize(x[i], decode_vocab))
-        print("////////")
     
+    embed = Embedding(ModelArgs)
+    print(embed(x).shape)  # Should print (batch_size, block_size, dim)
+    norm = RMSNorm(ModelArgs)
+    attention = MHA(ModelArgs)
+    x = norm(embed(x))
+    print(x.shape)
+    print(x[0][0])
+    x = attention(x)
+    print(x[0][0])
+    print(x.shape)
