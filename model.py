@@ -10,7 +10,7 @@ class ModelArgs:
     dim: int = 32
     max_len = 512
     block_size: int = 8
-    batch_size: int = 4
+    batch_size: int = 32
     lr = 1e-3
     qkv_dim: int = 64
     eps = 1e-6
@@ -97,12 +97,11 @@ class Embedding(nn.Module):
         super().__init__()
         self.vocab_size = ModelArgs.vocab_size
         self.dim = ModelArgs.dim
-        self.block_size = ModelArgs.block_size
+        self.max_len = ModelArgs.max_len
         self.token_embedding = nn.Embedding(self.vocab_size, self.dim)
-        self.position_embedding = nn.Embedding(self.block_size, self.dim)
+        self.position_embedding = nn.Embedding(self.max_len, self.dim)
 
     def forward(self, x: torch.Tensor):
-        
         return self.token_embedding(x) + self.position_embedding(torch.arange(x.size(1), device=x.device))
 
 class RMSNorm(nn.Module):
@@ -177,31 +176,77 @@ class MLP(nn.Module):
         x = self.dropout(x)
         return self.w2(x)
 
-    
+class Transformer(nn.Module):
+    """
+    Transformer model with multiple layers of MHA and MLP (returns the logits)
+    """
+    def __init__(self, ModelArgs):
+        super().__init__()
+        self.dim = ModelArgs.dim
+        self.n_layers = ModelArgs.n_layers
+        self.embed = Embedding(ModelArgs)
+        self.mha_layers = nn.ModuleList([MHA(ModelArgs) for _ in range(self.n_layers)])
+        self.mlp_layers = nn.ModuleList([MLP(ModelArgs) for _ in range(self.n_layers)])
+        self.attn_norm = nn.ModuleList([RMSNorm(ModelArgs) for _ in range(self.n_layers)])
+        self.ffn_norm = nn.ModuleList([RMSNorm(ModelArgs) for _ in range(self.n_layers)])
+        self.end_norm = RMSNorm(ModelArgs)
+        self.head = nn.Linear(ModelArgs.dim, ModelArgs.vocab_size)
+
+    def forward(self, x: torch.Tensor, target: torch.Tensor = None):
+        x = self.embed(x)  # (B, S, D)
+        for mha, mlp, attn_norm, ffn_norm in zip(self.mha_layers, self.mlp_layers, self.attn_norm, self.ffn_norm):
+            x = x + mha(attn_norm(x))
+            x = x + mlp(ffn_norm(x))
+        x = self.end_norm(x) # Take last token juiced up with all the info
+        logits = self.head(x)
+        # Note the shape of logits is different depending on if we have a target/loss
+        if target is not None:
+            B, S, D = logits.shape
+            logits = logits.view(B * S, D)  # Reshape to (B * S, D) (cross entropy is being difficult)
+            loss = F.cross_entropy(logits, target.flatten()) 
+        else:
+            loss = None
+        return logits, loss
+    @torch.no_grad()
+    def generate(self, x, max_length):
+        """
+        Generate text using the model.
+        """
+        self.eval()
+        for _ in range(max_length):
+            if x.size(1) >= ModelArgs.max_len:
+                x = x[:, -ModelArgs.max_len:]  # Keep only the last max_len tokens
+            logits, _ = self(x)
+            logits = logits[:, -1, :]  # Get the last token's logits
+            probs = F.softmax(logits, dim=-1)
+            next_token = torch.multinomial(probs, num_samples=1) # (B, 1)
+            x = torch.cat((x, next_token), dim=1) # (B, T+1)
+        self.train()
+        return x
+
 
 if __name__ == "__main__":
 
-    file = open("input.txt", "r", encoding="utf-8")
-    text = file.read()
+    with open("input.txt", "r", encoding="utf-8") as file:
+        text = file.read()
+
     encode_vocab, decode_vocab, vocab_size = build_vocab(text)
     assert vocab_size == ModelArgs.vocab_size, "Vocabulary size mismatch."
+    train_data, val_data = split_dataset(tokenize(text, encode_vocab))
 
+    # Training Loop
+    model = Transformer(ModelArgs)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=ModelArgs.lr)
+    model.train()
+    for i in range(1000):
+        x, y = get_batch("train")
+        logits, loss = model(x, y)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
 
-    x = detokenize(tokenize(text[:100], encode_vocab), decode_vocab)
-
-    train_data, val_data = split_dataset(tokenize(text[:100], encode_vocab))
-    print(detokenize(train_data, decode_vocab))
-    print("////////")
-    print(detokenize(val_data, decode_vocab))
-    x, y = get_batch("train")
-    
-    embed = Embedding(ModelArgs)
-    print(embed(x).shape)  # Should print (batch_size, block_size, dim)
-    norm = RMSNorm(ModelArgs)
-    attention = MHA(ModelArgs)
-    x = norm(embed(x))
-    print(x.shape)
-    print(x[0][0])
-    x = attention(x)
-    print(x[0][0])
-    print(x.shape)
+        print(loss.item())
+        
+    # Generate
+    generated = model.generate(torch.zeros((1,1), dtype=torch.long), max_length=500)[0]
+    print(detokenize(generated, decode_vocab))

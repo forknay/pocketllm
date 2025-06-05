@@ -7,3 +7,5 @@ Low scale LLM for autocompletion on open corpus database
 - Add device support (cuda, load move all params to cuda)
 
 - Add weight decay
+
+- Build a better tokenizer (using character level atm)
