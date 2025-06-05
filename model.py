@@ -72,12 +72,15 @@ def get_batch(mode: str):
 
     batch_size = ModelArgs.batch_size
     block_size = ModelArgs.block_size
-    batch_data = torch.empty((batch_size, block_size + 1), dtype=torch.long)
-    
+    input_data = torch.empty((batch_size, block_size), dtype=torch.long)
+    target_data = torch.empty((batch_size, block_size), dtype=torch.long)
     for b in range(batch_size):
         start = torch.randint(0, len(data) - block_size - 1, (1,)).item()
-        batch_data[b] = data[start:start + block_size + 1]
-    return batch_data
+        seq = data[start:start + block_size + 1]
+        input_data[b] = seq[:-1]
+        target_data[b] = seq[1:]
+
+    return input_data, target_data
 
 class Embedding(nn.Module):
     def __init__(self, vocab_size: int, dim: int):
@@ -104,7 +107,8 @@ if __name__ == "__main__":
     print(detokenize(train_data, decode_vocab))
     print("////////")
     print(detokenize(val_data, decode_vocab))
-    x = get_batch("train")
+    x, y = get_batch("train")
+    print(x, y)
     for i in range(x.shape[0]):
         print(detokenize(x[i], decode_vocab))
         print("////////")
