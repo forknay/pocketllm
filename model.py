@@ -18,6 +18,7 @@ class ModelArgs:
     n_heads: int = 4
     n_layers: int = 4
     dropout: float = 0.1
+    device = "cpu"
 
 def build_vocab(text: str):
     """
@@ -238,15 +239,20 @@ if __name__ == "__main__":
     model = Transformer(ModelArgs)
     optimizer = torch.optim.AdamW(model.parameters(), lr=ModelArgs.lr)
     model.train()
-    for i in range(1000):
+    avg_loss = 0.0
+    nb_iters = 1000
+    for i in range(nb_iters):
         x, y = get_batch("train")
         logits, loss = model(x, y)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
-
+        avg_loss += loss.item()
         print(loss.item())
+    
+    print(f"Average loss over {nb_iters} iterations: {avg_loss / 100}")
+    print("Training complete. Generating text...")
         
     # Generate
-    generated = model.generate(torch.zeros((1,1), dtype=torch.long), max_length=500)[0]
+    generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=500)[0]
     print(detokenize(generated, decode_vocab))
