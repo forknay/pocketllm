@@ -23,19 +23,19 @@ def build_vocab(text: str):
             decode[len(decode) + 1] = char
     encode["<start>"] = 0
     decode[0] = "<start>"
+    assert len(encode) == len(decode), "Encoding and decoding dictionaries must have the same length."
 
-
-    return encode, decode
+    return encode, decode, len(encode)
 
 def tokenize(text: str, encode: dict):
     """"
-    Build a character-level tokenizer
+    Convert text to tokens using the vocabulary.
     """
-    tokens = []
+    tokens = [0]  # Start token
     for char in text:
         tokens.append(encode[char])
 
-    return tokens
+    return torch.tensor(tokens, dtype=torch.long)
 
 def detokenize(tokens: list, decode: dict):
     """
@@ -43,7 +43,7 @@ def detokenize(tokens: list, decode: dict):
     """
     char_list = []
     for token in tokens:
-        char_list.append(decode[token])
+        char_list.append(decode[token.item()])
 
     return "".join(char_list)
 
@@ -66,6 +66,6 @@ if __name__ == "__main__":
 
     file = open("input.txt", "r", encoding="utf-8")
     text = file.read()
-    encode_vocab, decode_vocab = build_vocab(text)
+    encode_vocab, decode_vocab, vocab_size = build_vocab(text)
     print(detokenize(tokenize(text[:100], encode_vocab), decode_vocab))
 
