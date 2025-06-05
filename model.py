@@ -16,6 +16,9 @@ class ModelArgs:
     eps = 1e-6
     vocab_size = 65
     n_heads: int = 4
+    n_layers: int = 4
+    dropout: float = 0.1
+
 def build_vocab(text: str):
     """
     Build a character-level vocabulary from the text.
@@ -95,10 +98,10 @@ class Embedding(nn.Module):
         self.vocab_size = ModelArgs.vocab_size
         self.dim = ModelArgs.dim
         self.block_size = ModelArgs.block_size
-        self.token_embedding = nn.Embedding(vocab_size, self.dim)
+        self.token_embedding = nn.Embedding(self.vocab_size, self.dim)
         self.position_embedding = nn.Embedding(self.block_size, self.dim)
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         
         return self.token_embedding(x) + self.position_embedding(torch.arange(x.size(1), device=x.device))
 
@@ -112,7 +115,7 @@ class RMSNorm(nn.Module):
         self.eps = ModelArgs.eps
         self.weight = nn.Parameter(torch.ones(self.dim))
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor):
         return F.rms_norm(x, (self.dim,), self.weight, self.eps)
 
 class MHA(nn.Module):
@@ -125,11 +128,12 @@ class MHA(nn.Module):
         self.qkv_dim = ModelArgs.qkv_dim
         self.n_heads = ModelArgs.n_heads
         self.head_dim = self.qkv_dim // self.n_heads
-        self.wq = nn.Linear(self.dim, self.qkv_dim) # (H, D, C)
-        self.wk = nn.Linear(self.dim, self.qkv_dim) # (H, D, C)
-        self.wv = nn.Linear(self.dim, self.qkv_dim) # (H, D, C)
-        self.wo = nn.Linear(self.qkv_dim, self.dim) # (C, D)
+        self.wq = nn.Linear(self.dim, self.qkv_dim, bias=False) # (H, D, C)
+        self.wk = nn.Linear(self.dim, self.qkv_dim, bias=False) # (H, D, C)
+        self.wv = nn.Linear(self.dim, self.qkv_dim, bias=False) # (H, D, C)
+        self.wo = nn.Linear(self.qkv_dim, self.dim, bias=False) # (C, D)
         self.softmax_scale = self.head_dim ** -0.5
+        self.dropout = nn.Dropout(ModelArgs.dropout)
 
 
     def forward(self, x: torch.Tensor, mask: bool = True):
@@ -146,13 +150,32 @@ class MHA(nn.Module):
             attention_mask = torch.tril(torch.ones(seq_len, seq_len, device=scores.device))
             scores = scores.masked_fill(attention_mask.unsqueeze(0).unsqueeze(0) == 0, float("-inf")) 
         
-        scores = F.softmax(scores, dim=-1)
+        scores = self.dropout(F.softmax(scores, dim=-1))
         x = torch.matmul(scores, v) # (B, H, S, C)
         x = self.wo(x.transpose(1,2).contiguous().view(batch_size, seq_len, self.n_heads * self.head_dim)) # (B, S, D)
 
         return x
 
+class MLP(nn.Module):
+    """
+    FFN Layer
+    """
+    def __init__(self, ModelArgs):
+        super().__init__()
+        self.dim = ModelArgs.dim
+        self.hidden_dim = ModelArgs.dim * 4
+        self.w1 = nn.Linear(self.dim, self.hidden_dim)
+        self.w2 = nn.Linear(self.hidden_dim, self.dim)
+        self.w3 = nn.Linear(self.dim, self.hidden_dim)
+        self.dropout = nn.Dropout(ModelArgs.dropout)
 
+    def forward(self, x: torch.Tensor):
+        """
+        SwiGLU (im a deepseek enjoyer)
+        """
+        x = F.silu(self.w1(x)) * self.w3(x)
+        x = self.dropout(x)
+        return self.w2(x)
 
     
 

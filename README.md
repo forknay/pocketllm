@@ -6,4 +6,4 @@ Low scale LLM for autocompletion on open corpus database
 # To-DO
 - Add device support (cuda, load move all params to cuda)
 
-- Add dropout
+- Add weight decay
