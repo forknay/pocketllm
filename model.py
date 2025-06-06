@@ -266,9 +266,15 @@ if __name__ == "__main__":
     # Training Loop
     model = Transformer(ModelArgs).to(device=ModelArgs.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=ModelArgs.lr)
+    
+    import os
+    if os.path.exists("model_weights.pth"):
+        model.load_state_dict(torch.load("model_weights.pth", map_location=ModelArgs.device))
+        print("Model weights loaded from 'model_weights.pth'.")
+
     model.train()
     avg_loss = 0.0
-    nb_iters = 1000
+    nb_iters = 1
     j = 0
     for i in range(nb_iters):
         x, y = get_batch("train")
@@ -278,7 +284,9 @@ if __name__ == "__main__":
         optimizer.step()
         print(loss.item(), "  i =", i)
     
-    train_loss, val_loss = loss_calculation(logits, y)
+    torch.save(model.state_dict(), "model_weights.pth")
+
+    train_loss, val_loss = loss_calculation()
     print(f"Train Loss: {train_loss}, Validation Loss: {val_loss}, Iterations: {i}")
         
     # Generate
