@@ -9,3 +9,9 @@ Low scale LLM for autocompletion on open corpus database
 - Add weight decay
 
 - Build a better tokenizer (using character level atm)
+
+- Add Multi-Latent Attention
+
+- Gradient Accumulation
+
+- Gradient clipping

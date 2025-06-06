@@ -7,18 +7,18 @@ class ModelArgs:
     """
     A class to hold model arguments.
     """
-    dim: int = 32
-    max_len = 512
-    block_size: int = 8
-    batch_size: int = 32
-    lr = 1e-3
-    qkv_dim: int = 64
+    dim: int = 192
+    max_len = 5000
+    block_size: int = 256
+    batch_size: int = 64
+    lr = 3e-4
+    qkv_dim: int = dim*2
     eps = 1e-6
     vocab_size = 65
-    n_heads: int = 4
+    n_heads: int = 6
     n_layers: int = 4
-    dropout: float = 0.1
-    device = "cpu"
+    dropout: float = 0.2
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def build_vocab(text: str):
     """
@@ -89,6 +89,21 @@ def get_batch(mode: str):
         target_data[b] = seq[1:]
 
     return input_data, target_data
+
+@torch.no_grad()
+def loss_calculation():
+    """
+    Estimate the loss
+    """
+    model.eval()
+    out = {'train': 0, 'val': 0}
+    for split in ['train', 'val']:
+        for i in range(10):
+            x, y = get_batch(split)
+            _, loss = model(x, y)
+            out[split] += loss.item()
+    model.train()
+    return {k: v / 100 for k, v in out.items()}
 
 class Embedding(nn.Module):
     """
@@ -177,6 +192,23 @@ class MLP(nn.Module):
         x = self.dropout(x)
         return self.w2(x)
 
+class Block(nn.Module):
+    """
+    A single block of the transformer model.
+    Contains MHA and MLP layers with normalization.
+    """
+    def __init__(self, ModelArgs):
+        super().__init__()
+        self.mha = MHA(ModelArgs)
+        self.mlp = MLP(ModelArgs)
+        self.attn_norm = RMSNorm(ModelArgs)
+        self.ffn_norm = RMSNorm(ModelArgs)
+
+    def forward(self, x: torch.Tensor):
+        x = x + self.mha(self.attn_norm(x))
+        x = x + self.mlp(self.ffn_norm(x))
+        return x
+
 class Transformer(nn.Module):
     """
     Transformer model with multiple layers of MHA and MLP (returns the logits)
@@ -186,18 +218,14 @@ class Transformer(nn.Module):
         self.dim = ModelArgs.dim
         self.n_layers = ModelArgs.n_layers
         self.embed = Embedding(ModelArgs)
-        self.mha_layers = nn.ModuleList([MHA(ModelArgs) for _ in range(self.n_layers)])
-        self.mlp_layers = nn.ModuleList([MLP(ModelArgs) for _ in range(self.n_layers)])
-        self.attn_norm = nn.ModuleList([RMSNorm(ModelArgs) for _ in range(self.n_layers)])
-        self.ffn_norm = nn.ModuleList([RMSNorm(ModelArgs) for _ in range(self.n_layers)])
+        self.blocks = nn.ModuleList([Block(ModelArgs) for _ in range(self.n_layers)])
         self.end_norm = RMSNorm(ModelArgs)
         self.head = nn.Linear(ModelArgs.dim, ModelArgs.vocab_size)
 
     def forward(self, x: torch.Tensor, target: torch.Tensor = None):
         x = self.embed(x)  # (B, S, D)
-        for mha, mlp, attn_norm, ffn_norm in zip(self.mha_layers, self.mlp_layers, self.attn_norm, self.ffn_norm):
-            x = x + mha(attn_norm(x))
-            x = x + mlp(ffn_norm(x))
+        for l in range(self.n_layers):
+            x = self.blocks[l](x) 
         x = self.end_norm(x) # Take last token juiced up with all the info
         logits = self.head(x)
         # Note the shape of logits is different depending on if we have a target/loss
@@ -227,7 +255,7 @@ class Transformer(nn.Module):
 
 
 if __name__ == "__main__":
-
+    print(ModelArgs.device)
     with open("input.txt", "r", encoding="utf-8") as file:
         text = file.read()
 
@@ -236,22 +264,22 @@ if __name__ == "__main__":
     train_data, val_data = split_dataset(tokenize(text, encode_vocab))
 
     # Training Loop
-    model = Transformer(ModelArgs)
+    model = Transformer(ModelArgs).to(device=ModelArgs.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=ModelArgs.lr)
     model.train()
     avg_loss = 0.0
     nb_iters = 1000
+    j = 0
     for i in range(nb_iters):
         x, y = get_batch("train")
         logits, loss = model(x, y)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
         optimizer.step()
-        avg_loss += loss.item()
-        print(loss.item())
+        print(loss.item(), "  i =", i)
     
-    print(f"Average loss over {nb_iters} iterations: {avg_loss / 100}")
-    print("Training complete. Generating text...")
+    train_loss, val_loss = loss_calculation(logits, y)
+    print(f"Train Loss: {train_loss}, Validation Loss: {val_loss}, Iterations: {i}")
         
     # Generate
     generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=500)[0]
