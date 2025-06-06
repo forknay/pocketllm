@@ -274,7 +274,7 @@ if __name__ == "__main__":
 
     model.train()
     avg_loss = 0.0
-    nb_iters = 500
+    nb_iters = 1000
     j = 0
     for i in range(nb_iters):
         x, y = get_batch("train")
