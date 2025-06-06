@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 import torch.nn.functional as F
-
+import os
 
 class ModelArgs:
     """
@@ -27,7 +27,6 @@ def build_vocab(text: str):
     encode = {}
     decode = {}
     text = sorted(list(set(text)))
-    print(text[0:10])
     for char in text:
         if char not in encode: # And by extension not in decode
             encode[char] = len(encode)
@@ -90,7 +89,7 @@ def get_batch(mode: str):
 
     return input_data, target_data
 
-@torch.no_grad()
+@torch.inference_mode()
 def loss_calculation():
     """
     Estimate the loss
@@ -236,7 +235,7 @@ class Transformer(nn.Module):
         else:
             loss = None
         return logits, loss
-    @torch.no_grad()
+    @torch.inference_mode()
     def generate(self, x, max_length):
         """
         Generate text using the model.
@@ -254,6 +253,25 @@ class Transformer(nn.Module):
         return x
 
 
+def training_loop(model, optimizer, nb_iters=1000):
+    """
+    Training loop for the model.
+    """
+    if os.path.exists("model_weights.pth"):
+        model.load_state_dict(torch.load("model_weights.pth", map_location=ModelArgs.device))
+        print("Model weights loaded from 'model_weights.pth'.")
+    model.train()
+    for i in range(nb_iters):
+        x, y = get_batch("train")
+        _, loss = model(x, y)
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        optimizer.step()
+        print(loss.item(), "  i =", i)
+    
+    torch.save(model.state_dict(), "model_weights.pth")
+    print("Model weights saved to 'model_weights.pth'.")
+
 if __name__ == "__main__":
     print(ModelArgs.device)
     with open("input.txt", "r", encoding="utf-8") as file:
@@ -261,32 +279,17 @@ if __name__ == "__main__":
 
     encode_vocab, decode_vocab, vocab_size = build_vocab(text)
     assert vocab_size == ModelArgs.vocab_size, "Vocabulary size mismatch."
+    assert ModelArgs.max_len >= ModelArgs.block_size, "Max length must be greater than or equal to block size."
     train_data, val_data = split_dataset(tokenize(text, encode_vocab))
 
     # Training Loop
     model = Transformer(ModelArgs).to(device=ModelArgs.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=ModelArgs.lr)
-    
-    import os
-    if os.path.exists("model_weights.pth"):
-        model.load_state_dict(torch.load("model_weights.pth", map_location=ModelArgs.device))
-        print("Model weights loaded from 'model_weights.pth'.")
-    """
-    model.train()
-    nb_iters = 1000
-    for i in range(nb_iters):
-        x, y = get_batch("train")
-        logits, loss = model(x, y)
-        optimizer.zero_grad(set_to_none=True)
-        loss.backward()
-        optimizer.step()
-        print(loss.item(), "  i =", i)
-    
-    torch.save(model.state_dict(), "model_weights.pth")
-    """
+    nb_iters = 0
+    training_loop(model, optimizer, nb_iters)
     loss_dict = loss_calculation()
-    print(f"Train Loss: {loss_dict['train']}, Validation Loss: {loss_dict['val']}, Iterations: {2}")
-        
+    print(f"Train Loss: {loss_dict['train']}, Validation Loss: {loss_dict['val']}, Iterations: {nb_iters}")
+    print("\n")
     # Generate
     generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=500)[0]
     print(detokenize(generated, decode_vocab))
