@@ -8,7 +8,7 @@ class ModelArgs:
     A class to hold model arguments.
     """
     dim: int = 384
-    max_len = 5000
+    max_len = 5000 # TO change but i fucked up my weights so its saved and i will not change it now (anw not using it until context extension)
     block_size: int = 256
     batch_size: int = 64
     lr = 3e-4
@@ -243,8 +243,8 @@ class Transformer(nn.Module):
         """
         self.eval()
         for _ in range(max_length):
-            if x.size(1) >= ModelArgs.max_len:
-                x = x[:, -ModelArgs.max_len:]  # Keep only the last max_len tokens
+            if x.size(1) >= ModelArgs.block_size:
+                x = x[:, -ModelArgs.block_size:]  # Keep only the last max_len tokens
             logits, _ = self(x)
             logits = logits[:, -1, :]  # Get the last token's logits
             probs = F.softmax(logits, dim=-1)
@@ -271,11 +271,9 @@ if __name__ == "__main__":
     if os.path.exists("model_weights.pth"):
         model.load_state_dict(torch.load("model_weights.pth", map_location=ModelArgs.device))
         print("Model weights loaded from 'model_weights.pth'.")
-
+    """
     model.train()
-    avg_loss = 0.0
     nb_iters = 1000
-    j = 0
     for i in range(nb_iters):
         x, y = get_batch("train")
         logits, loss = model(x, y)
@@ -285,9 +283,9 @@ if __name__ == "__main__":
         print(loss.item(), "  i =", i)
     
     torch.save(model.state_dict(), "model_weights.pth")
-
-    train_loss, val_loss = loss_calculation()
-    print(f"Train Loss: {train_loss}, Validation Loss: {val_loss}, Iterations: {i}")
+    """
+    loss_dict = loss_calculation()
+    print(f"Train Loss: {loss_dict['train']}, Validation Loss: {loss_dict['val']}, Iterations: {2}")
         
     # Generate
     generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=500)[0]
