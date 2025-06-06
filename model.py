@@ -7,7 +7,7 @@ class ModelArgs:
     """
     A class to hold model arguments.
     """
-    dim: int = 192
+    dim: int = 384
     max_len = 5000
     block_size: int = 256
     batch_size: int = 64
@@ -16,7 +16,7 @@ class ModelArgs:
     eps = 1e-6
     vocab_size = 65
     n_heads: int = 6
-    n_layers: int = 4
+    n_layers: int = 6
     dropout: float = 0.2
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -274,7 +274,7 @@ if __name__ == "__main__":
 
     model.train()
     avg_loss = 0.0
-    nb_iters = 1
+    nb_iters = 500
     j = 0
     for i in range(nb_iters):
         x, y = get_batch("train")
