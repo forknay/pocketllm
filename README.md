@@ -1,6 +1,9 @@
 # Pocket LLM
-Low scale LLM for autocompletion on open corpus database 
+Low scale LLM for autocompletion on open corpus database (currently Tiny Shakespeare, 1.1M tokens)
 <br>
+Training Loss: 0.13
+<br>
+Validation Loss: 0.15
 <br>
 
 # To-DO
