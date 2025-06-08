@@ -1,9 +1,11 @@
 # Pocket LLM
 Low scale LLM for autocompletion on open corpus database (currently Tiny Shakespeare, 1.1M tokens)
 <br>
-Training Loss: 0.13
+Change max_length in the generate function to decide how many tokens to generate (context length will stay block_length regardless), toggle nb_iter if you want to train
 <br>
-Validation Loss: 0.15
+Training Loss: 1.33
+<br>
+Validation Loss: 1.55
 <br>
 
 # To-DO

@@ -291,5 +291,5 @@ if __name__ == "__main__":
     print(f"Train Loss: {loss_dict['train']}, Validation Loss: {loss_dict['val']}, Iterations: {nb_iters}")
     print("\n")
     # Generate
-    generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=5000)[0]
+    generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=10000)[0]
     print(detokenize(generated, decode_vocab))
