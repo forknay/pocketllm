@@ -241,6 +241,7 @@ class Transformer(nn.Module):
         Generate text using the model.
         """
         self.eval()
+        y = x.clone()
         for _ in range(max_length):
             if x.size(1) >= ModelArgs.block_size:
                 x = x[:, -ModelArgs.block_size:]  # Keep only the last max_len tokens
@@ -249,8 +250,9 @@ class Transformer(nn.Module):
             probs = F.softmax(logits, dim=-1)
             next_token = torch.multinomial(probs, num_samples=1) # (B, 1)
             x = torch.cat((x, next_token), dim=1) # (B, T+1)
+            y = torch.cat((y, next_token), dim=1)
         self.train()
-        return x
+        return y
 
 
 def training_loop(model, optimizer, nb_iters=1000):
@@ -291,5 +293,5 @@ if __name__ == "__main__":
     print(f"Train Loss: {loss_dict['train']}, Validation Loss: {loss_dict['val']}, Iterations: {nb_iters}")
     print("\n")
     # Generate
-    generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=10000)[0]
+    generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=2000)[0]
     print(detokenize(generated, decode_vocab))
