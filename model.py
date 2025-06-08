@@ -8,7 +8,7 @@ class ModelArgs:
     A class to hold model arguments.
     """
     dim: int = 384
-    max_len = 5000 # TO change but i fucked up my weights so its saved and i will not change it now (anw not using it until context extension)
+    max_len = 1024
     block_size: int = 256
     batch_size: int = 64
     lr = 3e-4
@@ -102,7 +102,7 @@ def loss_calculation():
             _, loss = model(x, y)
             out[split] += loss.item()
     model.train()
-    return {k: v / 100 for k, v in out.items()}
+    return {k: v / 10 for k, v in out.items()}
 
 class Embedding(nn.Module):
     """
@@ -268,9 +268,9 @@ def training_loop(model, optimizer, nb_iters=1000):
         loss.backward()
         optimizer.step()
         print(loss.item(), "  i =", i)
-    
-    torch.save(model.state_dict(), "model_weights.pth")
-    print("Model weights saved to 'model_weights.pth'.")
+        if i % 100 == 0:
+            torch.save(model.state_dict(), "model_weights.pth")
+            print(f"Model weights saved to 'model_weights.pth'.")
 
 if __name__ == "__main__":
     print(ModelArgs.device)
@@ -291,5 +291,5 @@ if __name__ == "__main__":
     print(f"Train Loss: {loss_dict['train']}, Validation Loss: {loss_dict['val']}, Iterations: {nb_iters}")
     print("\n")
     # Generate
-    generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=500)[0]
+    generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=5000)[0]
     print(detokenize(generated, decode_vocab))
