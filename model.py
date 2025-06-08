@@ -287,7 +287,7 @@ if __name__ == "__main__":
     # Training Loop
     model = Transformer(ModelArgs).to(device=ModelArgs.device)
     optimizer = torch.optim.AdamW(model.parameters(), lr=ModelArgs.lr)
-    nb_iters = 0
+    nb_iters = 1000
     training_loop(model, optimizer, nb_iters)
     loss_dict = loss_calculation()
     print(f"Train Loss: {loss_dict['train']}, Validation Loss: {loss_dict['val']}, Iterations: {nb_iters}")
