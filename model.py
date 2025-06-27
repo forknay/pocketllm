@@ -262,9 +262,10 @@ def training_loop(model, optimizer, nb_iters=1000):
     """
     Training loop for the model.
     """
-    if os.path.exists("model_weights_bpe.pth"):
-        model.load_state_dict(torch.load("model_weights_bpe.pth", map_location=ModelArgs.device))
-        print("Model weights loaded from 'model_weights_bpe.pth'.")
+    path = "model_weights_bpe.pth"
+    if os.path.exists(path):
+        model.load_state_dict(torch.load(path, map_location=ModelArgs.device))
+        print(f"Model weights loaded from '{path}'.")
     model.train()
     for i in range(nb_iters):
         x, y = get_batch("train")
@@ -274,8 +275,8 @@ def training_loop(model, optimizer, nb_iters=1000):
         optimizer.step()
         print(loss.item(), "  i =", i)
         if i % 100 == 0:
-            torch.save(model.state_dict(), "model_weights_bpe.pth")
-            print(f"Model weights saved to 'model_weights_bpe.pth'.")
+            torch.save(model.state_dict(), path)
+            print(f"Model weights saved to '{path}'.")
 
 if __name__ == "__main__":
     print(ModelArgs.device)
