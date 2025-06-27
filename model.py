@@ -44,9 +44,19 @@ def tokenize(text: str, encode: dict):
     Convert text to tokens using the vocabulary.
     """
     tokens = []
-    for char in text:
-        tokens.append(encode[char])
-
+    skip = False
+    for i in range(len(text)-1):
+        if skip:
+            skip = False
+            continue
+        elif text[i:i+2] in encode:
+            tokens.append(encode[text[i:i+2]])
+            skip = True
+        else:
+            tokens.append(encode[text[i]])
+    if not skip:  # If the last character was not part of a pair
+        tokens.append(encode[text[-1]])
+    print(len(text), "->", len(tokens))
     return torch.tensor(tokens, dtype=torch.long)
 
 def detokenize(tokens: list, decode: dict):
