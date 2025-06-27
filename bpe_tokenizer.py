@@ -9,17 +9,13 @@ def generate_bpe_list(text, size):
     Returns:
         list: A list of BPE tokens representing the embedding table.
     """
-    words = text.split()
     vocab = {}
-    for word in words:
-        length = len(word)
-        if length > 1:
-            for i in range(length - 1):
-                pair = word[i:i + 2]
-                if vocab.get(pair):
-                    vocab[pair] += 1
-                else:
-                    vocab[pair] = 1
+    for i in range(len(text)-1):
+        pair = text[i:i + 2]
+        if vocab.get(pair):
+            vocab[pair] += 1
+        else:
+            vocab[pair] = 1
 
     sorted_vocab = sorted(vocab.items(), key=lambda x: x[1], reverse=True)
     chars = sorted(list(set(text)))
