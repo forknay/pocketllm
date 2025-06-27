@@ -1,0 +1,52 @@
+
+def bpe_tokenize(text, size):
+    """
+    Create a byte pair encoding (BPE) vocab table from the given text.
+
+    Args:
+        text (str): The input text to create the BPE embedding table from.
+        size (int): The size of the embedding table.
+    Returns:
+        list: A list of BPE tokens representing the embedding table.
+    """
+    words = text.split()
+    vocab = {}
+    for word in words:
+        length = len(word)
+        if length > 1:
+            for i in range(length - 1):
+                pair = word[i:i + 2]
+                if vocab.get(pair):
+                    vocab[pair] += 1
+                else:
+                    vocab[pair] = 1
+        else:
+            if vocab.get(word):
+                vocab[word] += 1
+            else:
+                vocab[word] = 1
+    sorted_vocab = sorted(vocab.items(), key=lambda x: x[1], reverse=True)
+    chars = sorted(list(set(text)))
+    size = size - len(chars)  # Reserve space for individual characters
+    if size < 0:
+        raise ValueError("Size must be greater than the number of unique characters in the text.")
+    
+    bpe_tokens = [token for token, _ in sorted_vocab[:size]]
+    return chars + bpe_tokens
+
+def build_bpe_vocab(bpe_tokens):
+    encode = {}
+    decode = {}
+    
+
+    assert len(encode) == len(decode), "Encoding and decoding dictionaries must have the same length."
+
+    return encode, decode, len(encode)
+if __name__ == "__main__":
+    with open("input.txt", "r", encoding="utf-8") as file:
+        text = file.read()
+    
+    size = 1000 # Recommended by yours truly (github copilot)
+    bpe_tokens = bpe_tokenize(text, size)
+    print("BPE Tokens:", bpe_tokens)
+    print(len(bpe_tokens), "tokens created.")
