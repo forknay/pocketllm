@@ -2,24 +2,27 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 import os
+from bpe_tokenizer import *
 
 class ModelArgs:
     """
     A class to hold model arguments.
     """
-    dim: int = 384
+    dim: int = 128
     max_len = 1024
     block_size: int = 256
     batch_size: int = 64
     lr = 3e-4
     qkv_dim: int = dim*2
     eps = 1e-6
-    vocab_size = 65
-    n_heads: int = 6
+    vocab_size = 1000 # This should match the tokenizer size if using BPE
+    n_heads: int = 8
     n_layers: int = 6
     dropout: float = 0.2
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    assert dim % n_heads == 0, "Dimension must be divisible by number of heads."
+    assert qkv_dim % n_heads == 0, "QKV dimension must be divisible by number of heads."
 def build_vocab(text: str):
     """
     Build a character-level vocabulary from the text.
@@ -40,7 +43,7 @@ def tokenize(text: str, encode: dict):
     """"
     Convert text to tokens using the vocabulary.
     """
-    tokens = []  
+    tokens = []
     for char in text:
         tokens.append(encode[char])
 
@@ -259,9 +262,9 @@ def training_loop(model, optimizer, nb_iters=1000):
     """
     Training loop for the model.
     """
-    if os.path.exists("model_weights.pth"):
-        model.load_state_dict(torch.load("model_weights.pth", map_location=ModelArgs.device))
-        print("Model weights loaded from 'model_weights.pth'.")
+    if os.path.exists("model_weights_bpe.pth"):
+        model.load_state_dict(torch.load("model_weights_bpe.pth", map_location=ModelArgs.device))
+        print("Model weights loaded from 'model_weights_bpe.pth'.")
     model.train()
     for i in range(nb_iters):
         x, y = get_batch("train")
@@ -271,15 +274,15 @@ def training_loop(model, optimizer, nb_iters=1000):
         optimizer.step()
         print(loss.item(), "  i =", i)
         if i % 100 == 0:
-            torch.save(model.state_dict(), "model_weights.pth")
-            print(f"Model weights saved to 'model_weights.pth'.")
+            torch.save(model.state_dict(), "model_weights_bpe.pth")
+            print(f"Model weights saved to 'model_weights_bpe.pth'.")
 
 if __name__ == "__main__":
     print(ModelArgs.device)
     with open("input.txt", "r", encoding="utf-8") as file:
         text = file.read()
 
-    encode_vocab, decode_vocab, vocab_size = build_vocab(text)
+    encode_vocab, decode_vocab, vocab_size = build_bpe_vocab(generate_bpe_list(text, ModelArgs.vocab_size))
     assert vocab_size == ModelArgs.vocab_size, "Vocabulary size mismatch."
     assert ModelArgs.max_len >= ModelArgs.block_size, "Max length must be greater than or equal to block size."
     train_data, val_data = split_dataset(tokenize(text, encode_vocab))
