@@ -3,17 +3,23 @@ Low scale LLM for autocompletion on open corpus database (currently Tiny Shakesp
 <br>
 Change max_length in the generate function to decide how many tokens to generate (context length will stay block_length regardless), toggle nb_iter if you want to train
 <br>
-Training Loss: 1.33
+**Character level tokenizer:**
+<br>
+Training Loss: 1.33 
 <br>
 Validation Loss: 1.55
+<br>
+**Byte-Pair Encoding tokenizer:**
+<br>
+Training Loss: 1.56
+<br>
+Validation Loss: 3.34 
 <br>
 
 # To-DO
 - Add device support (cuda, load move all params to cuda)
 
 - Add weight decay
-
-- Build a better tokenizer (using character level atm)
 
 - Add Multi-Latent Attention
 
