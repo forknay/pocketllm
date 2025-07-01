@@ -4,23 +4,38 @@ import torch.nn.functional as F
 import os
 from bpe_tokenizer import *
 
+TRAINING = False
+BPE = False
 class ModelArgs:
     """
     A class to hold model arguments.
     """
-    dim: int = 128
-    max_len = 1024
-    block_size: int = 256
-    batch_size: int = 64
-    lr = 3e-4
-    qkv_dim: int = dim*2
-    eps = 1e-6
-    vocab_size = 1000 # This should match the tokenizer size if using BPE
-    n_heads: int = 8
-    n_layers: int = 6
-    dropout: float = 0.2
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
+    if BPE:
+        dim: int = 128
+        max_len = 1024
+        block_size: int = 256
+        batch_size: int = 64
+        lr = 3e-4
+        qkv_dim: int = dim*2
+        eps = 1e-6
+        vocab_size = 1000 # This should match the tokenizer size if using BPE
+        n_heads: int = 8
+        n_layers: int = 6
+        dropout: float = 0.2
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    else:
+        dim: int = 384
+        max_len = 1024
+        block_size: int = 256
+        batch_size: int = 64
+        lr = 3e-4
+        qkv_dim: int = dim*2
+        eps = 1e-6
+        vocab_size = 65
+        n_heads: int = 6
+        n_layers: int = 6
+        dropout: float = 0.2
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     assert dim % n_heads == 0, "Dimension must be divisible by number of heads."
     assert qkv_dim % n_heads == 0, "QKV dimension must be divisible by number of heads."
 def build_vocab(text: str):
@@ -292,20 +307,34 @@ if __name__ == "__main__":
     print(ModelArgs.device)
     with open("input.txt", "r", encoding="utf-8") as file:
         text = file.read()
-
-    encode_vocab, decode_vocab, vocab_size = build_bpe_vocab(generate_bpe_list(text, ModelArgs.vocab_size))
-    assert vocab_size == ModelArgs.vocab_size, "Vocabulary size mismatch."
+    encode_vocab, decode_vocab, vocab_size = build_vocab(text)
+    encode_vocab_bpe, decode_vocab_bpe, vocab_size_bpe = build_bpe_vocab(generate_bpe_list(text, ModelArgs.vocab_size))
+    assert vocab_size_bpe == ModelArgs.vocab_size, "Vocabulary size mismatch."
     assert ModelArgs.max_len >= ModelArgs.block_size, "Max length must be greater than or equal to block size."
-    train_data, val_data = split_dataset(tokenize(text, encode_vocab))
 
-    # Training Loop
-    model = Transformer(ModelArgs).to(device=ModelArgs.device)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=ModelArgs.lr)
-    nb_iters = 0
-    training_loop(model, optimizer, nb_iters)
-    loss_dict = loss_calculation()
-    print(f"Train Loss: {loss_dict['train']}, Validation Loss: {loss_dict['val']}, Iterations: {nb_iters}")
-    print("\n")
+    if TRAINING:
+        train_data, val_data = split_dataset(tokenize(text, encode_vocab))
+        # Training Loop
+        model = Transformer(ModelArgs).to(device=ModelArgs.device)
+        optimizer = torch.optim.AdamW(model.parameters(), lr=ModelArgs.lr)
+        nb_iters = 0
+        training_loop(model, optimizer, nb_iters)
+        loss_dict = loss_calculation()
+        print(f"Train Loss: {loss_dict['train']}, Validation Loss: {loss_dict['val']}, Iterations: {nb_iters}")
+        print("\n")
     # Generate
-    generated = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=2000)[0]
-    print(detokenize(generated, decode_vocab))
+    else:
+        if BPE:
+            model = Transformer(ModelArgs).to(device=ModelArgs.device)
+            model.load_state_dict(torch.load("model_weights_bpe.pth", map_location=ModelArgs.device))
+            generated_bpe = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=1000)[0]
+            print("Generated Text (BPE):")
+            print("-"*20)
+            print(detokenize(generated_bpe, decode_vocab_bpe))
+        else:
+            model = Transformer(ModelArgs).to(device=ModelArgs.device)
+            model.load_state_dict(torch.load("model_weights.pth", map_location=ModelArgs.device))
+            generated_char = model.generate(torch.zeros((1,1), dtype=torch.long, device=ModelArgs.device), max_length=2000)[0]
+            print("Generated Text (Character Level):")
+            print("-"*20)
+            print(detokenize(generated_char, decode_vocab))
