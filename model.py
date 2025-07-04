@@ -5,7 +5,7 @@ import os
 from bpe_tokenizer import *
 
 TRAINING = False
-BPE = False
+BPE = True
 class ModelArgs:
     """
     A class to hold model arguments.
